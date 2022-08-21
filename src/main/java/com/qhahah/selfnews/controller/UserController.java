@@ -9,7 +9,9 @@ import lombok.extern.log4j.Log4j2;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.IOException;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 
 @RequestMapping("/2/users")
 @RestController()
@@ -66,8 +68,8 @@ public class UserController {
       User user = mapper.readValue(userString, User.class);
 
       String id = user.getId();
-      Integer maxResults = 56; // Integer | The maximum number of results.
-      String paginationToken = "paginationToken_example"; // String | This parameter is used to get the next 'page' of results.
+      Integer maxResults = 30; // Integer | The maximum number of results. The `max_results` query parameter value [200] is not between 5 and 100"
+      String paginationToken ; // String | This parameter is used to get the next 'page' of results.
       Set<String> tweetFields = new HashSet<>(List.of()); // Set<String> | A comma separated list of Tweet fields to display.
       Set<String> expansions = new HashSet<>(List.of()); // Set<String> | A comma separated list of fields to expand.
       Set<String> mediaFields = new HashSet<>(List.of()); // Set<String> | A comma separated list of Media fields to display.
@@ -84,7 +86,6 @@ public class UserController {
               .placeFields(placeFields)
               .execute();
 
-
       List<Problem> errors = response.getErrors();
       if (errors!=null&&errors.size()>0){
         errors.forEach(
@@ -96,20 +97,43 @@ public class UserController {
           });
       }
 
-      List<Tweet> likedTweets = response.getData();
-      if (likedTweets == null){
-        log.warn("no like tweets, user id {}", id);
-        return "";
+      List<Tweet> likedTweets = new ArrayList<>();
+      int requestTimes = 1;
+      Get2ListsIdFollowersResponseMeta get2ListsIdFollowersResponseMeta = response.getMeta();
+      while (get2ListsIdFollowersResponseMeta != null){
+
+        long startTime = System.nanoTime();
+//        likedTweets.addAll(Objects.requireNonNull(response.getData()));
+        Objects.requireNonNull(response.getData()).forEach(data -> {
+          try {
+            likedTweets.add(Tweet.fromJson(data.getText()));
+          } catch (IOException e) {
+            throw new RuntimeException(e);
+          }
+        });
+        log.debug(likedTweets.toString());
+        paginationToken = get2ListsIdFollowersResponseMeta.getNextToken();
+        response = TwitterApiInstance.apiInstance.tweets().usersIdLikedTweets(id)
+                .maxResults(maxResults)
+                .tweetFields(tweetFields)
+                .paginationToken(paginationToken)
+                .expansions(expansions)
+                .mediaFields(mediaFields)
+                .pollFields(pollFields)
+                .userFields(userFields)
+                .placeFields(placeFields)
+                .execute();
+        get2ListsIdFollowersResponseMeta = response.getMeta();
+        TimeUnit.SECONDS.sleep(10);
+        log.debug("sleep one second, request times: {}, array size: {}", ++requestTimes, likedTweets.size());
+        long endTime = System.nanoTime();
+        log.info("request time: {}", endTime-startTime);
       }
-      StringBuilder stringBuilder = new StringBuilder();
-      for (Tweet tweet:likedTweets){
-        stringBuilder.append(tweet.getText());
-        stringBuilder.append(";");
-      }
-      return stringBuilder.toString();
+
+      return likedTweets.toString();
     } catch (Exception e) {
       e.printStackTrace();
-      log.error("Passer error: {}", e.toString());
+      log.error("error: {}", e.toString());
     }
     return "";
   }
