@@ -1,5 +1,6 @@
 package com.qhahah.selfnews.controller;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.qhahah.selfnews.utils.TwitterApiInstance;
 import com.twitter.clientlib.ApiException;
@@ -136,6 +137,43 @@ public class UserController {
       log.error("error: {}", e.toString());
     }
     return "";
+  }
+//  http://127.0.0.1:8080/2/users/by/username/stephenzhang233/following
+  @GetMapping("/by/username/{username}/following")
+  public String getFollowingByUserName(@PathVariable("username") String userName){
+    String userString = getUserByUserName(userName);
+    ObjectMapper mapper = new ObjectMapper();
+    try {
+      User user = mapper.readValue(userString, User.class);
+      String id = user.getId();
+      Integer maxResults = 56;
+      Set<String> userFields = new HashSet<>(List.of());
+      Set<String> expansions = new HashSet<>(List.of());
+      Set<String> tweetFields = new HashSet<>(List.of());
+      Get2UsersIdFollowingResponse response = TwitterApiInstance.apiInstance
+              .users()
+              .usersIdFollowing(id)
+              .maxResults(maxResults)
+              .userFields(userFields)
+              .expansions(expansions)
+              .tweetFields(tweetFields)
+              .execute();
+
+      List<User> followingUsers = response.getData();
+      assert followingUsers != null;
+      followingUsers.forEach(followinguser -> log.debug("name:{}, username:{} ", followinguser.getName(), followinguser.getUsername()));
+      Get2ListsIdFollowersResponseMeta get2ListsIdFollowersResponseMeta = response.getMeta();
+      List<Problem> problems = response.getErrors();
+      Expansions resExpansions = response.getIncludes();
+      log.debug("followingUsers: {}", followingUsers.toString());
+      log.debug("get2ListsIdFollowersResponseMeta:{}", get2ListsIdFollowersResponseMeta != null ? get2ListsIdFollowersResponseMeta.toString() : null);
+      log.debug("problems:{}", problems != null ? problems.toString() : null);
+      log.debug("resExpansions:{}", resExpansions != null ? resExpansions.toString() : null);
+      return followingUsers.toString();
+    } catch (JsonProcessingException | ApiException e) {
+      log.error("error: {}", e.toString());
+      return " ";
+    }
   }
   //  Example:
   //  curl http://127.0.0.1:8080/2/users/by/username/stephenzhang233
